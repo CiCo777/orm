@@ -200,6 +200,40 @@ describe('createInMemoryCacheStore', () => {
       }).toEqual({ bytes: [8, 7], sameMemory: false });
     });
 
+    it('copies a RegExp until its TTL expires, preserving its source and flags', async () => {
+      const fakeClock = controlledClock(1_000);
+      const store = createInMemoryCacheStore({ ttlMs: 100, clock: fakeClock.clock });
+      const pattern = /cache-hit/giu;
+      await putResult(store, 'k', { pattern });
+
+      fakeClock.advanceTo(1_099);
+      const first = (await storedResult<{ pattern: RegExp }>(store, 'k'))?.pattern;
+      first?.test('CACHE-HIT');
+      const second = (await storedResult<{ pattern: RegExp }>(store, 'k'))?.pattern;
+      const secondLastIndexBeforeMatch = second?.lastIndex;
+
+      expect({
+        source: second?.source,
+        flags: second?.flags,
+        matches: second?.test('CACHE-HIT'),
+        distinctFromInput: second !== pattern,
+        distinctCopies: first !== second,
+        firstLastIndex: first?.lastIndex,
+        secondLastIndexBeforeMatch,
+      }).toEqual({
+        source: pattern.source,
+        flags: pattern.flags,
+        matches: true,
+        distinctFromInput: true,
+        distinctCopies: true,
+        firstLastIndex: 9,
+        secondLastIndexBeforeMatch: 0,
+      });
+
+      fakeClock.advanceTo(1_100);
+      expect(await storedResult(store, 'k')).toBeUndefined();
+    });
+
     it('keeps statement rows with their driver values by reference, copying the array and each row', async () => {
       class ObjectId {
         constructor(readonly hex: string) {}
