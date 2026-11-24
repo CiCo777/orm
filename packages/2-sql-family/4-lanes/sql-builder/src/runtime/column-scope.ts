@@ -12,19 +12,21 @@ interface Reads {
   readonly subqueries: readonly SelectAst[];
 }
 
-const NOTHING: Reads = { columns: [], subqueries: [] };
-
 /** The columns an expression reads itself, and the subqueries inside it, which read their own sources. */
 function readsOf(expression: AnyExpression): Reads {
-  return expression.fold<Reads>({
-    empty: NOTHING,
-    combine: (a, b) => ({
-      columns: [...a.columns, ...b.columns],
-      subqueries: [...a.subqueries, ...b.subqueries],
-    }),
-    columnRef: (columnRef) => ({ columns: [columnRef], subqueries: [] }),
-    select: (subquery) => ({ columns: [], subqueries: [subquery] }),
+  const columns: ColumnRef[] = [];
+  const subqueries: SelectAst[] = [];
+  expression.fold<void>({
+    empty: undefined,
+    combine: () => undefined,
+    columnRef: (columnRef) => {
+      columns.push(columnRef);
+    },
+    select: (subquery) => {
+      subqueries.push(subquery);
+    },
   });
+  return { columns, subqueries };
 }
 
 function aliasOf(source: AnyFromSource): string | undefined {
